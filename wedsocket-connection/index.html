@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 WebSocket Sensor Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .connection-panel {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .connection-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .connection-input {
+            padding: 10px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 16px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .connection-input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.5);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status-bar {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .connection-status {
+            color: white;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+        
+        .status-connected {
+            color: #4CAF50;
+        }
+        
+        .status-disconnected {
+            color: #f44336;
+        }
+        
+        .status-connecting {
+            color: #ff9800;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-title {
+            color: white;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .sensor-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+        
+        .sensor-unit {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.8);
+            margin-bottom: 15px;
+        }
+        
+        .led-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .led {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.3);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .led.active {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #ff4757);
+            border-color: #ff4757;
+            box-shadow: 0 0 20px rgba(255, 71, 87, 0.6);
+        }
+        
+        .led.inactive {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .led-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
+        }
+        
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .data-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        
+        .data-label {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.8);
+            margin-bottom: 5px;
+        }
+        
+        .data-value {
+            font-size: 1.2rem;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .alert {
+            background: rgba(255, 107, 107, 0.2);
+            border: 2px solid #ff6b6b;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .data-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .connection-controls {
+                flex-direction: column;
+            }
+            
+            .connection-input {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌡️ ESP32 WebSocket Sensor Monitor</h1>
+        
+        <div class="connection-panel">
+            <div class="connection-controls">
+                <input type="text" id="wsUrl" class="connection-input" 
+                       placeholder="ws://192.168.1.100:81" 
+                       value="ws://192.168.1.100:81">
+                <button id="connectBtn" class="btn">Connect</button>
+                <button id="disconnectBtn" class="btn" disabled>Disconnect</button>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div class="connection-status" id="connectionStatus">
+                🔴 Disconnected - Enter ESP32 IP address and click Connect
+            </div>
+        </div>
+        
+        <div id="alertContainer"></div>
+        
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">🌡️ LM35 Temperature</div>
+                <div class="sensor-value" id="tempValue">--</div>
+                <div class="sensor-unit">°C (°F)</div>
+                <div class="led-container">
+                    <div class="led inactive" id="tempLed1">
+                        <div class="led-label">35°C</div>
+                    </div>
+                    <div class="led inactive" id="tempLed2">
+                        <div class="led-label">40°C</div>
+                    </div>
+                    <div class="led inactive" id="tempLed3">
+                        <div class="led-label">45°C</div>
+                    </div>
+                    <div class="led inactive" id="tempLed4">
+                        <div class="led-label">50°C</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">📳 Vibration Level</div>
+                <div class="sensor-value" id="vibrationValue">--</div>
+                <div class="sensor-unit">m/s²</div>
+                <div class="led-container">
+                    <div class="led inactive" id="vibLed1">
+                        <div class="led-label">12 m/s²</div>
+                    </div>
+                    <div class="led inactive" id="vibLed2">
+                        <div class="led-label">16 m/s²</div>
+                    </div>
+                    <div class="led inactive" id="vibLed3">
+                        <div class="led-label">20 m/s²</div>
+                    </div>
+                    <div class="led inactive" id="vibLed4">
+                        <div class="led-label">24 m/s²</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🔄 Acceleration (m/s²)</div>
+                <div class="data-grid">
+                    <div class="data-item">
+                        <div class="data-label">X-Axis</div>
+                        <div class="data-value" id="accelX">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Y-Axis</div>
+                        <div class="data-value" id="accelY">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Z-Axis</div>
+                        <div class="data-value" id="accelZ">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🌀 Rotation (rad/s)</div>
+                <div class="data-grid">
+                    <div class="data-item">
+                        <div class="data-label">X-Axis</div>
+                        <div class="data-value" id="gyroX">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Y-Axis</div>
+                        <div class="data-value" id="gyroY">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Z-Axis</div>
+                        <div class="data-value" id="gyroZ">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🌡️ MPU6050 Temperature</div>
+                <div class="sensor-value" id="mpuTempValue">--</div>
+                <div class="sensor-unit">°C</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">📊 Connection Info</div>
+                <div class="data-grid">
+                    <div class="data-item">
+                        <div class="data-label">WiFi Status</div>
+                        <div class="data-value" id="wifiStatus">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Connected Clients</div>
+                        <div class="data-value" id="clientCount">--</div>
+                    </div>
+                    <div class="data-item">
+                        <div class="data-label">Last Update</div>
+                        <div class="data-value" id="lastUpdate">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let connectionStatus = document.getElementById('connectionStatus');
+        let connectBtn = document.getElementById('connectBtn');
+        let disconnectBtn = document.getElementById('disconnectBtn');
+        let wsUrlInput = document.getElementById('wsUrl');
+        
+        function connect() {
+            const url = wsUrlInput.value.trim();
+            if (!url) {
+                alert('Please enter a WebSocket URL');
+                return;
+            }
+            
+            connectionStatus.textContent = '🟡 Connecting...';
+            connectionStatus.className = 'connection-status status-connecting';
+            connectBtn.disabled = true;
+            
+            try {
+                ws = new WebSocket(url);
+                
+                ws.onopen = function(event) {
+                    console.log('WebSocket connected');
+                    connectionStatus.textContent = '🟢 Connected to ESP32';
+                    connectionStatus.className = 'connection-status status-connected';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    
+                    // Request initial sensor data
+                    ws.send('getSensorData');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateDisplay(data);
+                        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                    } catch (error) {
+                        console.error('Error parsing JSON:', error);
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    console.log('WebSocket disconnected');
+                    connectionStatus.textContent = '🔴 Disconnected';
+                    connectionStatus.className = 'connection-status status-disconnected';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    
+                    // Clear display data
+                    clearDisplay();
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                    connectionStatus.textContent = '🔴 Connection Error';
+                    connectionStatus.className = 'connection-status status-disconnected';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                };
+                
+            } catch (error) {
+                console.error('Error creating WebSocket:', error);
+                connectionStatus.textContent = '🔴 Connection Failed';
+                connectionStatus.className = 'connection-status status-disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+        
+        function updateDisplay(data) {
+            // Update temperature
+            document.getElementById('tempValue').textContent = 
+                data.lm35_temp_c.toFixed(1) + '°C (' + data.lm35_temp_f.toFixed(1) + '°F)';
+            
+            // Update vibration
+            document.getElementById('vibrationValue').textContent = data.vibration.toFixed(2);
+            
+            // Update MPU temperature
+            document.getElementById('mpuTempValue').textContent = data.mpu_temp_c.toFixed(1);
+            
+            // Update acceleration
+            document.getElementById('accelX').textContent = data.acceleration.x.toFixed(2);
+            document.getElementById('accelY').textContent = data.acceleration.y.toFixed(2);
+            document.getElementById('accelZ').textContent = data.acceleration.z.toFixed(2);
+            
+            // Update rotation
+            document.getElementById('gyroX').textContent = data.rotation.x.toFixed(2);
+            document.getElementById('gyroY').textContent = data.rotation.y.toFixed(2);
+            document.getElementById('gyroZ').textContent = data.rotation.z.toFixed(2);
+            
+            // Update connection info
+            document.getElementById('wifiStatus').textContent = data.wifi_connected ? '✅ Connected' : '❌ Disconnected';
+            document.getElementById('clientCount').textContent = data.connected_clients;
+            
+            // Update LED status
+            updateLED('tempLed1', data.leds.led1);
+            updateLED('tempLed2', data.leds.led2);
+            updateLED('tempLed3', data.leds.led3);
+            updateLED('tempLed4', data.leds.led4);
+            
+            updateLED('vibLed1', data.leds.led1);
+            updateLED('vibLed2', data.leds.led2);
+            updateLED('vibLed3', data.leds.led3);
+            updateLED('vibLed4', data.leds.led4);
+            
+            // Update alerts
+            updateAlerts(data.alerts, data.lm35_temp_c, data.vibration);
+        }
+        
+        function updateLED(ledId, isActive) {
+            const led = document.getElementById(ledId);
+            if (isActive) {
+                led.className = 'led active';
+            } else {
+                led.className = 'led inactive';
+            }
+        }
+        
+        function updateAlerts(alerts, temp, vibration) {
+            const alertContainer = document.getElementById('alertContainer');
+            let alertHTML = '';
+            
+            if (alerts.temp_alert || alerts.vibration_alert) {
+                alertHTML = '<div class="alert">';
+                alertHTML += '<strong>⚠️ ALERT</strong><br>';
+                
+                if (alerts.temp_alert) {
+                    alertHTML += `🌡️ High temperature detected: ${temp.toFixed(1)}°C<br>`;
+                }
+                
+                if (alerts.vibration_alert) {
+                    alertHTML += `📳 High vibration detected: ${vibration.toFixed(2)} m/s²`;
+                }
+                
+                alertHTML += '</div>';
+            }
+            
+            alertContainer.innerHTML = alertHTML;
+        }
+        
+        function clearDisplay() {
+            // Clear all sensor values
+            document.getElementById('tempValue').textContent = '--';
+            document.getElementById('vibrationValue').textContent = '--';
+            document.getElementById('mpuTempValue').textContent = '--';
+            document.getElementById('accelX').textContent = '--';
+            document.getElementById('accelY').textContent = '--';
+            document.getElementById('accelZ').textContent = '--';
+            document.getElementById('gyroX').textContent = '--';
+            document.getElementById('gyroY').textContent = '--';
+            document.getElementById('gyroZ').textContent = '--';
+            document.getElementById('wifiStatus').textContent = '--';
+            document.getElementById('clientCount').textContent = '--';
+            document.getElementById('lastUpdate').textContent = '--';
+            
+            // Clear all LEDs
+            const leds = document.querySelectorAll('.led');
+            leds.forEach(led => led.className = 'led inactive');
+            
+            // Clear alerts
+            document.getElementById('alertContainer').innerHTML = '';
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        
+        // Allow Enter key to connect
+        wsUrlInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter' && !connectBtn.disabled) {
+                connect();
+            }
+        });
+        
+        // Auto-detect IP address format
+        wsUrlInput.addEventListener('input', function() {
+            let value = this.value.trim();
+            
+            // If user enters just an IP address, add the ws:// and :81
+            if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value)) {
+                this.value = `ws://${value}:81`;
+            }
+        });
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
